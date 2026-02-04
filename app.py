@@ -26,6 +26,13 @@ st.markdown(
         background: #f7fbfa;
         border: 1px solid #e5f0ed;
     }
+    .kpi-card {
+        background: #ffffff;
+        border-radius: 14px;
+        padding: 14px 16px;
+        border: 1px solid #e1eeea;
+        box-shadow: 0 8px 18px rgba(11, 61, 79, 0.08);
+    }
     .chip {
         display: inline-block;
         background: #0b3d4f;
@@ -34,6 +41,27 @@ st.markdown(
         border-radius: 999px;
         font-size: 0.75rem;
         margin-right: 6px;
+    }
+    .pill {
+        display: inline-block;
+        background: #e8f6f2;
+        color: #0b3d4f;
+        padding: 6px 12px;
+        border-radius: 999px;
+        font-size: 0.85rem;
+        font-weight: 600;
+        margin: 4px 6px 4px 0;
+        border: 1px solid #d3ebe3;
+    }
+    .badge {
+        display: inline-block;
+        background: #0b3d4f;
+        color: #f2fbff;
+        padding: 6px 10px;
+        border-radius: 8px;
+        font-size: 0.8rem;
+        font-weight: 600;
+        margin-right: 8px;
     }
     </style>
     """,
@@ -108,7 +136,34 @@ with col_info:
         """
     )
     st.markdown("#### Activity")
-    st.metric("Items classified", len(st.session_state.history))
+    kpi_cols = st.columns(2)
+    with kpi_cols[0]:
+        st.markdown(
+            f"""
+            <div class="kpi-card">
+                <div class="badge">Total</div>
+                <div style="font-size: 1.6rem; font-weight: 700;">{len(st.session_state.history)}</div>
+                <div style="opacity: 0.7;">Items classified</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    with kpi_cols[1]:
+        latest_supplier = (
+            st.session_state.history[0]["supplier"]
+            if st.session_state.history
+            else "N/A"
+        )
+        st.markdown(
+            f"""
+            <div class="kpi-card">
+                <div class="badge">Latest</div>
+                <div style="font-size: 1.1rem; font-weight: 700;">{latest_supplier or "N/A"}</div>
+                <div style="opacity: 0.7;">Supplier</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
     with st.expander("Recent classifications", expanded=False):
         if not st.session_state.history:
             st.caption("No items yet.")
@@ -122,6 +177,16 @@ tabs = st.tabs(["Result", "History", "Raw"])
 
 result_payload = None
 raw_text = None
+confidence_value = "N/A"
+
+
+def _value_for_keys(payload, keys):
+    if not isinstance(payload, dict):
+        return None
+    for key in keys:
+        if key in payload and payload[key]:
+            return payload[key]
+    return None
 
 if classify_clicked:
     if not po_description.strip():
@@ -134,6 +199,10 @@ if classify_clicked:
                 result_payload = json.loads(raw_text)
             except Exception:
                 result_payload = None
+        confidence_value = _value_for_keys(
+            result_payload,
+            ["confidence", "score", "probability", "model_confidence"],
+        )
         st.session_state.history.insert(
             0,
             {
@@ -148,6 +217,59 @@ with tabs[0]:
     st.markdown("#### Result")
     if classify_clicked:
         if auto_json and result_payload is not None:
+            l1 = _value_for_keys(result_payload, ["l1", "L1", "level1", "category_l1"])
+            l2 = _value_for_keys(result_payload, ["l2", "L2", "level2", "category_l2"])
+            l3 = _value_for_keys(result_payload, ["l3", "L3", "level3", "category_l3"])
+
+            st.markdown("**Category Highlights**")
+            pills = []
+            if l1:
+                pills.append(f"<span class='pill'>L1: {l1}</span>")
+            if l2:
+                pills.append(f"<span class='pill'>L2: {l2}</span>")
+            if l3:
+                pills.append(f"<span class='pill'>L3: {l3}</span>")
+            if pills:
+                st.markdown("".join(pills), unsafe_allow_html=True)
+            else:
+                st.caption("No structured L1/L2/L3 fields detected.")
+
+            result_cols = st.columns(3)
+            with result_cols[0]:
+                st.markdown(
+                    f"""
+                    <div class="kpi-card">
+                        <div class="badge">Confidence</div>
+                        <div style="font-size: 1.3rem; font-weight: 700;">{confidence_value}</div>
+                        <div style="opacity: 0.7;">Model score</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+            with result_cols[1]:
+                st.markdown(
+                    f"""
+                    <div class="kpi-card">
+                        <div class="badge">Supplier</div>
+                        <div style="font-size: 1.1rem; font-weight: 700;">{supplier or "N/A"}</div>
+                        <div style="opacity: 0.7;">Input context</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+            with result_cols[2]:
+                st.markdown(
+                    f"""
+                    <div class="kpi-card">
+                        <div class="badge">Tokens</div>
+                        <div style="font-size: 1.1rem; font-weight: 700;">N/A</div>
+                        <div style="opacity: 0.7;">Usage</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+            st.markdown("**Structured Output**")
             st.json(result_payload)
         elif raw_text is not None:
             st.warning("Could not parse JSON. Showing raw output.")
